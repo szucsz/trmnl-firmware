@@ -2,6 +2,9 @@
 
 #include <hardware_types.h>
 #include <stdint.h>
+#if defined(BOARD_ZECTRIX)
+#include "zectrix_pins.h"
+#endif
 
 //
 // derive device-specific power flags

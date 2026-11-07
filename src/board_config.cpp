@@ -53,6 +53,8 @@ const TRMNL_DEVICE device_list[] =
   "m5_paper_color", 0,   0,     0,   0,    0,   0,    3,    2,    1,     0xff, 0xff,    0xff,   BATT_NONE, EPD_PAPER_COLOR, 
   "reterminal_e1004", 0, 0,     0,   0,    0,   0,    0xff, 0xff, 4,     1,    21,      12,     BATT_ADC,  EPD_133_COLOR,
   "trmnl_steam",   7,    8,     6,   10,   5,   4,    21,   20,   2,     3,    0xff,    0xff,   BATT_ADC,  EPD_583,
+  "zectrix_note4", 12,   13,    11,  9,    10,  8,    0xff, 0xff, 0,     4,    0xff,    6,      BATT_ADC,  EPD_ZECTRIX_NOTE4,
+  "zectrix_note4c",12,   13,    11,  9,    10,  8,    0xff, 0xff, 0,     4,    0xff,    6,      BATT_ADC,  EPD_ZECTRIX_NOTE4C,
   NULL,            0,    0,     0,   0,    0,   0,    0,    0,    0,     0,    0,       0,      0,         0,
 }; // device_list
 // clang-format on
@@ -60,7 +62,7 @@ const TRMNL_DEVICE device_list[] =
 // TRMNL SPI ePaper panel types list. The list order is fixed and based on enumerated values
 // N.B. ALWAYS ADD NEW PANELS TO THE END OF THE LIST
 // clang-format off
-const DISPLAY_PROFILE dpList[12][3] = { // 1-bit and 2-bit display types for each profile
+const DISPLAY_PROFILE dpList[14][3] = { // 1-bit and 2-bit display types for each profile
     {{EP75_800x480, EP75_800x480_4GRAY}, {EP75_800x480_GEN2, EP75_800x480_4GRAY_GEN2}, {EP75_800x480, EP75_800x480_4GRAY_V2}},
     {{EP426_800x480, EP426_800x480_4GRAY}, {EP426_800x480, EP426_800x480_4GRAY}, {EP426_800x480, EP426_800x480_4GRAY}},
     {{EP397_800x480, EP397_800x480_4GRAY}, {EP397_800x480, EP397_800x480_4GRAY}, {EP397_800x480, EP397_800x480_4GRAY}},
@@ -73,6 +75,8 @@ const DISPLAY_PROFILE dpList[12][3] = { // 1-bit and 2-bit display types for eac
     {{EPD_M5_PAPER_COLOR, EPD_M5_PAPER_COLOR},{EPD_M5_PAPER_COLOR, EPD_M5_PAPER_COLOR},{EPD_M5_PAPER_COLOR, EPD_M5_PAPER_COLOR}},
     {{EPD_SEEED_E1004, EPD_SEEED_E1004},{EPD_SEEED_E1004, EPD_SEEED_E1004},{EPD_SEEED_E1004, EPD_SEEED_E1004}},
     {{EP368_792x528, EP368_792x528_4GRAY}, {EP368_792x528, EP368_792x528_4GRAY}, {EP368_792x528, EP368_792x528_4GRAY}},
+    {{EP42YR_400x300, EP42YR_400x300}, {EP42YR_400x300, EP42YR_400x300}, {EP42YR_400x300, EP42YR_400x300}},
+    {{EP42YR_400x300, EP42YR_400x300}, {EP42YR_400x300, EP42YR_400x300}, {EP42YR_400x300, EP42YR_400x300}},
 };
 // clang-format on
 #endif // !PARALLEL_EPD

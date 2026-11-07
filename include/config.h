@@ -107,6 +107,8 @@
 // DHCP hostname prefix (hyphens instead of spaces).
 #if defined(PARALLEL_EPD)
 #define WIFI_CLIENT_HOSTNAME_PREFIX "TRMNL-X"
+#elif defined(BOARD_ZECTRIX)
+#define WIFI_CLIENT_HOSTNAME_PREFIX "TRMNL-ZECTRIX"
 #elif defined(BOARD_TRMNL) || defined(BOARD_TRMNL_GEN2)
 #define WIFI_CLIENT_HOSTNAME_PREFIX "TRMNL-OG"
 #elif defined(BOARD_TRMNL_4CLR)
@@ -190,6 +192,8 @@ enum {
   EPD_PAPER_COLOR,
   EPD_133_COLOR,
   EPD_368,
+  EPD_ZECTRIX_NOTE4,
+  EPD_ZECTRIX_NOTE4C,
 };
 
 /**

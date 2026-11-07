@@ -93,7 +93,9 @@ void showWakeLogo(void) {
     showMessageWithLogo(NONE);
   }
 #else
+#ifndef BOARD_ZECTRIX
   display_show_image(storedLogoOrDefault(1), DEFAULT_IMAGE_SIZE, false, true);
+#endif
 #endif // BOARD_TRMNL_X
   // Force the display to show the current playlist image after the loading screen
   // (even if it hasn't changed)
