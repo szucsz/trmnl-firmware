@@ -403,7 +403,9 @@ static void begin_message_screen(void) {
 static void draw_centered_logo(uint8_t *image_buffer) {
   auto width = display_width();
   auto height = display_height();
+#ifndef BOARD_ZECTRIX_NATIVE_EPD
   UWORD Imagesize = ((width % 8 == 0) ? (width / 8) : (width / 8 + 1)) * height;
+#endif
 
   if (image_buffer && *(uint16_t *)image_buffer == BB_BITMAP_MARKER) {
     // G5 compressed image
@@ -417,7 +419,13 @@ static void draw_centered_logo(uint8_t *image_buffer) {
     bbep.loadG5Image(image_buffer, x, y, BBEP_WHITE, BBEP_BLACK);
   } else {
 #ifdef BB_EPAPER
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+    if (image_buffer && bbep.loadBMP(image_buffer, 0, 0, BBEP_WHITE, BBEP_BLACK) != BBEP_SUCCESS) {
+      Log_error("ZecTrix message-logo BMP decode failed");
+    }
+#else
     if (image_buffer) memcpy(bbep.getBuffer(), image_buffer + 62, Imagesize); // uncompressed 1-bpp bitmap
+#endif
 #endif
   }
 }

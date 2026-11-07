@@ -18,6 +18,9 @@
 #include "battery.h"
 #include "config.h"
 #include "messages.h"
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+#include <zectrix_native_display.h>
+#endif
 #ifdef PARALLEL_EPD
 FASTEPD bbep;
 #else
@@ -66,15 +69,27 @@ const uint8_t u8_graytable[] = {
 static uint8_t bLightSleepWanted = 0;
 
 static void display_apply_light_sleep(uint8_t enabled) {
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  (void)enabled;
+#else
 #ifdef CMD_CS1_CS2
   bbep.setLightSleep(enabled, pDevice->epd_en_pin);
 #else
   bbep.setLightSleep(enabled);
 #endif
+#endif
 }
 
 bool display_update_epaper(int refreshMode, bool wait, bool writePlane, uint8_t plane) {
-#if defined(BOARD_SEEED_RETERMINAL_E1002) || defined(BOARD_SEEED_RETERMINAL_E1004) || defined(BOARD_TRMNL_GEN2)
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  (void)refreshMode;
+  (void)wait;
+  (void)writePlane;
+  (void)plane;
+  const bool result = zectrix_native_display_update();
+  bCanDoPartial = false;
+  return result;
+#elif defined(BOARD_SEEED_RETERMINAL_E1002) || defined(BOARD_SEEED_RETERMINAL_E1004) || defined(BOARD_TRMNL_GEN2)
     // Light sleep with the WiFi radio running is unsupported
   if (bLightSleepWanted && WiFi.getMode() != WIFI_MODE_NULL) {
     display_apply_light_sleep(false);
@@ -98,6 +113,11 @@ bool display_update_epaper(int refreshMode, bool wait, bool writePlane, uint8_t 
 }
 
 static void display_select_one_bit_panel(bool only_if_changed = false) {
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  const int panel = dpList[pDevice->panel_set][iTempProfile].TwoBit;
+  if (!only_if_changed || bbep.getPanelType() != panel) bbep.setPanelType(panel);
+  bbep.setMemoryMode(BB_MODE_NATIVE);
+#else
   bool custom_pins = pDevice->epd_mosi_pin != 0 || pDevice->epd_sck_pin != 0;
   int one_bit = dpList[pDevice->panel_set][custom_pins ? iTempProfile : 0].OneBit;
   if (only_if_changed && bbep.getPanelType() == one_bit) {
@@ -110,13 +130,19 @@ static void display_select_one_bit_panel(bool only_if_changed = false) {
   } else {
     bbep.begin(one_bit);
   }
+#endif
 }
 
 // Message screens are 1-bit
 void display_prepare_message(void) {
   display_select_one_bit_panel(true);
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  bbep.setMemoryMode(BB_MODE_NATIVE);
+  bbep.allocBuffer();
+#else
   bbep.setMemoryMode(BB_MODE_1BPP); // use 1-bit mode to save memory
   bbep.allocBuffer(false);
+#endif
 }
 
 #endif // BB_EPAPER
@@ -154,6 +180,9 @@ void display_init(void) {
     panel_rev_read = true;
     Log_info("Panel ID = 0x%08x\n", panel_rev);
   }
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  zectrix_native_display_init();
+#else
   if (pDevice->epd_mosi_pin != 0 || pDevice->epd_sck_pin != 0) {
     bbep.setPanelType(dpList[pDevice->panel_set][iTempProfile].OneBit); // must be set BEFORE calling initio
     bbep.initIO(pDevice->epd_dc_pin, pDevice->epd_rst_pin, pDevice->epd_busy_pin, pDevice->epd_cs_pin,
@@ -161,6 +190,7 @@ void display_init(void) {
   } else { // it's a pre-defined PCB+display in bb_epaper
     bbep.begin(dpList[pDevice->panel_set][0].OneBit);
   }
+#endif
 #else // Parallel eink devices
 #if defined(BOARD_SEEED_RETERMINAL_E1003)
   bbep.initIT8951(EPD_MOSI_PIN, EPD_MISO_PIN, EPD_SCK_PIN, EPD_CS_PIN, EPD_BUSY_PIN, EPD_RST_PIN, EPD_EN_PIN,
@@ -205,6 +235,17 @@ void display_set_light_sleep(uint8_t enabled) {
 // Clear any ghosting on the X display by wiping it black/white many times
 void display_wipe(void) {
 #ifdef BB_EPAPER
+
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  display_select_one_bit_panel();
+  if (bbep.allocBuffer() == BBEP_SUCCESS) {
+    bbep.fillScreen(BBEP_WHITE);
+    (void)zectrix_native_display_update();
+    bbep.freeBuffer();
+  }
+  zectrix_native_display_sleep();
+  return;
+#endif
 
 #ifdef BOARD_TRMNL_4CLR
   int refreshCount = 2;
@@ -261,12 +302,25 @@ void display_sleep(uint32_t u32Millis) {
  */
 void display_reset(void) {
   Log_info("e-Paper Clear start");
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  const bool allocated = bbep.getBuffer() == nullptr;
+  if (allocated) {
+    bbep.setMemoryMode(BB_MODE_NATIVE);
+    if (bbep.allocBuffer() != BBEP_SUCCESS) {
+      Log_error("display_reset: ZecTrix framebuffer allocation failed");
+      return;
+    }
+  }
+#endif
   bbep.fillScreen(BBEP_WHITE);
 #ifdef BB_EPAPER
   display_set_light_sleep(true);
   if (!display_update_epaper(apiDisplayResult.response.maximum_compatibility ? REFRESH_FULL : REFRESH_FAST, true)) {
     Log_error("display_reset: e-paper update failed");
   }
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  if (allocated) bbep.freeBuffer();
+#endif
 #else
   bbep.fullUpdate();
 #endif
@@ -305,6 +359,9 @@ static bool draw_image(uint8_t *image_buffer, int data_size, int *pRefreshMode, 
   if (isPNG == true && data_size < MAX_IMAGE_SIZE) {
     Log_info("Drawing PNG");
     iRefreshMode = png_to_epd(image_buffer, data_size, false);
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+    bAlloc = (bbep.getBuffer() != nullptr);
+#endif
   } else if (MOTOSHORT(image_buffer) == 0xffd8) {
     Log_info("Drawing JPEG");
     iRefreshMode = jpeg_to_epd(image_buffer, data_size);
@@ -314,11 +371,19 @@ static bool draw_image(uint8_t *image_buffer, int data_size, int *pRefreshMode, 
             // G5 compressed image
       BB_BITMAP *pBBB = (BB_BITMAP *)image_buffer;
 #ifdef BB_EPAPER
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+      bbep.setMemoryMode(BB_MODE_NATIVE);
+      if (bbep.allocBuffer() != BBEP_SUCCESS) {
+        Log_error("ZecTrix Group5 framebuffer allocation failed");
+        return false;
+      }
+#else
       bbep.setMemoryMode(BB_MODE_1BPP); // use 1-bit mode to save memory
       if (bbep.allocBuffer(false) != BBEP_SUCCESS) {
         Log_info("Error allocating bb_epaper frame buffer");
         return false;
       }
+#endif
       bAlloc = true;
 #endif
         //    int x = (width - pBBB->width)/2;
@@ -336,6 +401,20 @@ static bool draw_image(uint8_t *image_buffer, int data_size, int *pRefreshMode, 
                                 DISPLAY_BATTERY_ICON_MARGIN);
 #endif // BOARD_TRMNL_X
     } else {
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+      bbep.setMemoryMode(BB_MODE_NATIVE);
+      if (bbep.allocBuffer() != BBEP_SUCCESS) {
+        Log_error("ZecTrix BMP framebuffer allocation failed");
+        return false;
+      }
+      bAlloc = true;
+      bbep.fillScreen(BBEP_WHITE);
+      if (bbep.loadBMP(image_buffer, 0, 0, BBEP_WHITE, BBEP_BLACK) != BBEP_SUCCESS) {
+        bbep.freeBuffer();
+        Log_error("ZecTrix BMP decode failed");
+        return false;
+      }
+#else
          // This work-around is due to a lack of RAM; the correct method would be to use loadBMP()
       const int iBmpWidth = image_buffer[18] | (image_buffer[19] << 8);
       const int iBmpHeight = image_buffer[22] | (image_buffer[23] << 8);
@@ -346,6 +425,7 @@ static bool draw_image(uint8_t *image_buffer, int data_size, int *pRefreshMode, 
       bbep.setMemoryMode(BB_MODE_1BPP);
       bbep.setBuffer(image_buffer + 62); // uncompressed 1-bpp bitmap
 #endif // BB_EPAPER
+#endif // BOARD_ZECTRIX_NATIVE_EPD
     }
 #ifdef BB_EPAPER
     bbep.writePlane(); // send image data to the EPD (converting it if needed to 4/6-clr)
@@ -485,7 +565,11 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
 void display_sleep(void) {
   Log_info("Goto Sleep...");
 #ifdef BB_EPAPER
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  zectrix_native_display_sleep();
+#else
   bbep.sleep(LIGHT_SLEEP);
+#endif
 #else
   bbep.einkPower(0);
   bbep.deInit();

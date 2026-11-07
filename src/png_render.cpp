@@ -140,7 +140,7 @@ int png_draw_6clr(PNGDRAW *pDraw) {
   return 1; // continue decoding
 } /* png_draw_6clr() */
 
-#ifdef BOARD_TRMNL_4CLR
+#if defined(BOARD_TRMNL_4CLR) || defined(BOARD_ZECTRIX_NATIVE_EPD)
 //
 // Draw the PNG image into the local framebuffer memory using the drawPixel() method
 // to do color translation and to properly format the memory layout
@@ -252,6 +252,19 @@ int png_draw_4clr(PNGDRAW *pDraw) {
       *d++ = uc;
     }
   } // for x
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+  if ((iWidth & 3) != 0) {
+    const int padding = 4 - (iWidth & 3);
+    uc <<= 2 * padding;
+    for (int pad = 0; pad < padding; ++pad) uc |= (1u << (2 * pad)); // white = 01
+    *d++ = uc;
+  }
+  auto *framebuffer = static_cast<uint8_t *>(bbep.getBuffer());
+  if (framebuffer == nullptr) return 0;
+  const size_t row_bytes = (bbep.width() + 3) / 4;
+  const size_t decoded_bytes = (iWidth + 3) / 4;
+  memcpy(framebuffer + pDraw->y * row_bytes, pTemp, decoded_bytes);
+#else
   bbep.writeData(pTemp, (iWidth + 3) / 4);
   if (iWidth < bbep.width()) {
         // fill the unused area of the display with white
@@ -260,9 +273,10 @@ int png_draw_4clr(PNGDRAW *pDraw) {
     memset(d, 0x55, x); // 0x55 = 4 pixels of white (01)
     bbep.writeData(d, x);
   }
+#endif
   return 1; // continue decoding
 } /* png_draw4clr() */
-#endif // BOARD_TRMNL_4CLR (4 color only)
+#endif // four-color displays
 
 int png_draw(PNGDRAW *pDraw) {
   int x;
@@ -577,12 +591,26 @@ int png_to_epd(const uint8_t *pPNG, int iDataSize, bool bPrevious) {
         bbep.writePlane(); // send the pixels to the display panel
         return REFRESH_FAST;
       }
-#ifdef BOARD_TRMNL_4CLR
+#if defined(BOARD_TRMNL_4CLR) || defined(BOARD_ZECTRIX_NATIVE_EPD)
       Log_info("%s [%d]: decoding for 4-color EPD\r\n", __FILE__, __LINE__);
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+      bbep.setPanelType(dpList[pDevice->panel_set][iTempProfile].TwoBit);
+      bbep.setMemoryMode(BB_MODE_NATIVE);
+      if (bbep.allocBuffer() != BBEP_SUCCESS) {
+        Log_error("ZecTrix framebuffer allocation failed");
+        png->close();
+        delete png;
+        return -1;
+      }
+      bbep.fillScreen(BBEP_WHITE);
+#endif
       png->openRAM((uint8_t *)pPNG, iDataSize, png_draw_4clr);
+#ifndef BOARD_ZECTRIX_NATIVE_EPD
       bbep.startWrite(PLANE_1); // start writing image data
-      png->decode(NULL, 0);
+#endif
+      rc = png->decode(NULL, 0);
       png->close();
+#ifdef BOARD_TRMNL_4CLR
       if (png->getHeight() < bbep.height()) {
         // fill in missing lines with white
         uint8_t *d = bbep.getCache();
@@ -592,9 +620,17 @@ int png_to_epd(const uint8_t *pPNG, int iDataSize, bool bPrevious) {
           bbep.writeData(d, iLen);
         }
       }
+#endif
       delete (png); // free the decoder instance
+      if (rc != PNG_SUCCESS) {
+#ifdef BOARD_ZECTRIX_NATIVE_EPD
+        bbep.freeBuffer();
+#endif
+        Log_error("Four-color PNG decode failed: %d", rc);
+        return -1;
+      }
       return REFRESH_FULL;
-#endif // BOARD_TRMNL_4CLR
+#endif // four-color displays
       bbep.setAddrWindow(0, 0, bbep.width(), bbep.height());
       if (png->getBpp() == 1 ||
           (png->getBpp() == 2 && png_count_colors(png, pPNG, iDataSize) == 2)) { // 1-bit image (single plane)
