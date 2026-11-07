@@ -1,10 +1,8 @@
 name: publish-dev-firmware
 
 on:
-  # triggered by build.yml only if the tests pass:
+  # Kept reusable for explicit future callers; manual publishing is disabled in this fork.
   workflow_call: {}
-  # or triggered manually:
-  workflow_dispatch: {}
 
 jobs:
   publish:
