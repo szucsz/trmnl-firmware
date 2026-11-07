@@ -1,0 +1,61 @@
+name: Zectrix weekly upstream sync
+
+on:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: zectrix-weekly-sync
+  cancel-in-progress: false
+
+jobs:
+  rebase-zectrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # Scheduled workflows must be present on the repository's default branch
+      # (main here). Check out zectrix for the firmware and sync script.
+      - uses: actions/checkout@v7
+        with:
+          ref: zectrix
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Rebase, build, or open a conflict PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/automation/zectrix-weekly-sync.sh sync
+
+  publish-upstream-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: zectrix
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Publish the latest upstream release with Zectrix Note 4C changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/automation/zectrix-weekly-sync.sh release
