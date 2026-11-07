@@ -3,7 +3,7 @@
 #ifdef BOARD_ZECTRIX
 
 #include <Arduino.h>
-#include <DEV_Config.h>
+#include <zectrix_pins.h>
 #include <driver/gpio.h>
 #include <driver/rtc_io.h>
 
@@ -29,18 +29,18 @@ namespace {
 void zectrix_power_init() {
   gpio_deep_sleep_hold_dis();
 
-  configure_output(static_cast<gpio_num_t>(VBAT_HOLD_PIN), HIGH);
-  configure_output(static_cast<gpio_num_t>(EPD_POWER_PIN), HIGH);
+  configure_output(static_cast<gpio_num_t>(ZECTRIX_VBAT_HOLD_PIN), HIGH);
+  configure_output(static_cast<gpio_num_t>(ZECTRIX_EPD_POWER_PIN), HIGH);
   delay(10);
 }
 
 void zectrix_prepare_deep_sleep() {
   // The panel is bistable, so its power rail can be disabled after refresh.
-  hold_rtc_output(static_cast<gpio_num_t>(EPD_POWER_PIN), LOW);
+  hold_rtc_output(static_cast<gpio_num_t>(ZECTRIX_EPD_POWER_PIN), LOW);
 
   // GPIO17 controls the board's battery power latch. Letting it fall LOW cuts
   // power to the ESP32-S3 and prevents timer/button deep-sleep wake-up.
-  hold_rtc_output(static_cast<gpio_num_t>(VBAT_HOLD_PIN), HIGH);
+  hold_rtc_output(static_cast<gpio_num_t>(ZECTRIX_VBAT_HOLD_PIN), HIGH);
   gpio_deep_sleep_hold_en();
 }
 

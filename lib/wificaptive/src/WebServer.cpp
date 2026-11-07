@@ -7,6 +7,26 @@
 
 #include "WifiCaptive.h"
 
+namespace {
+  const char *connectionStateName(WifiConnectionState state) {
+    switch (state) {
+    case WifiConnectionState::Idle:
+      return "idle";
+    case WifiConnectionState::Connecting:
+      return "connecting";
+    case WifiConnectionState::Connected:
+      return "connected";
+    case WifiConnectionState::AuthenticationFailed:
+      return "authentication_failed";
+    case WifiConnectionState::NetworkNotFound:
+      return "network_not_found";
+    case WifiConnectionState::Failed:
+      return "failed";
+    }
+    return "failed";
+  }
+} // namespace
+
 void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP, WifiOperationCallbacks callbacks,
                     const String &modemMac) {
     //======================== Webserver ========================
@@ -43,17 +63,10 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP, WifiOperat
 
   // Serve index.html
   server.on("/", HTTP_ANY, [&](AsyncWebServerRequest *request) {
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/html", INDEX_HTML, INDEX_HTML_LEN);
+    AsyncWebServerResponse *response =
+      request->beginResponse(200, "text/html; charset=utf-8", INDEX_HTML, INDEX_HTML_LEN);
     response->addHeader("Content-Encoding", "gzip");
     request->send(response); // redirect to the local IP URL
-  });
-
-  // Servce logo.svg
-  server.on("/logo.svg", HTTP_ANY, [&](AsyncWebServerRequest *request) {
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/html", LOGO_SVG, LOGO_SVG_LEN);
-    response->addHeader("Content-Encoding", "gzip");
-    response->addHeader("Content-Type", "image/svg+xml");
-    request->send(response);
   });
 
   server.on("/soft-reset", HTTP_ANY, [callbacks](AsyncWebServerRequest *request) {
@@ -61,13 +74,9 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP, WifiOperat
     request->send(200);
   });
 
-  server.on("/advanced", HTTP_GET, [&](AsyncWebServerRequest *request) {
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/html", ADVANCED_HTML, ADVANCED_HTML_LEN);
-    response->addHeader("Content-Encoding", "gzip");
-    request->send(response);
-  });
+  server.on("/advanced", HTTP_GET, [&](AsyncWebServerRequest *request) { request->redirect("/#advanced"); });
   server.on("/run-test", HTTP_GET, [](AsyncWebServerRequest *request) {
-    Serial.println("Running sensor test from web...");
+    Log_info_serial("Running sensor test from web...");
     String json = testTemperature();
     request->send(200, "application/json", json);
   });
@@ -77,10 +86,30 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP, WifiOperat
     prefs.begin("data", true);
     String apiUrl = prefs.getString("api_url", "");
     prefs.end();
+    bool verboseLogging = read_verbose_logging();
     apiUrl.replace("\\", "\\\\");
     apiUrl.replace("\"", "\\\"");
-    request->send(200, "application/json", "{\"api_url\":\"" + apiUrl + "\"}");
+    request->send(200, "application/json",
+                  "{\"api_url\":\"" + apiUrl + "\",\"verbose_logging\":" + (verboseLogging ? "true" : "false") + "}");
   });
+
+  server.on("/connection-status", HTTP_GET, [callbacks](AsyncWebServerRequest *request) {
+    String response = "{\"status\":\"";
+    response += connectionStateName(callbacks.getConnectionState());
+    response += "\"}";
+    request->send(200, "application/json", response);
+  });
+
+  AsyncCallbackJsonWebHandler *verboseLoggingHandler =
+    new AsyncCallbackJsonWebHandler("/verbose-logging", [](AsyncWebServerRequest *request, JsonVariant &json) {
+      JsonObject data = json.as<JsonObject>();
+      bool enabled = data["enabled"].is<bool>() && data["enabled"].as<bool>();
+      write_verbose_logging(enabled); // takes effect immediately
+
+      Log_info("WebServer: Verbose logging set to %s", enabled ? "enabled" : "disabled");
+      request->send(200, "application/json", String("{\"verbose_logging\":") + (enabled ? "true" : "false") + "}");
+    });
+  server.addHandler(verboseLoggingHandler);
 
   auto scanGET = server.on("/scan", HTTP_GET, [callbacks, modemMac](AsyncWebServerRequest *request) {
     String json = "{\"networks\":[";
@@ -126,7 +155,7 @@ void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP, WifiOperat
     }
 
     WiFi.scanDelete();
-    Serial.println(json);
+    Log_info_serial("%s", json.c_str());
 
     if (WiFi.scanComplete() == -2) {
 #ifdef CONFIG_IDF_TARGET_ESP32C5
